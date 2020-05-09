@@ -91,6 +91,7 @@ RUN apt-get update --fix-missing \
     libssl-dev \
     libbz2-dev \
     libffi-dev \
+    liblzma-dev \
     libreadline-dev \
     libsqlite3-dev \
     libncurses5-dev \
