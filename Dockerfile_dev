@@ -1,0 +1,402 @@
+# Dockerfile script to build multi-node training environment.
+# (for Tensorflow 1.15.x(compat.v1 & compat.v2) and PyTorch with Horovod)
+#
+# Author : NoUnique (kofmap@gmail.com)
+# Copyright 2020 NoUnique. All Rights Reserved
+
+ARG UBUNTU_VERSION=16.04
+ARG CUDA_VERSION=10.0
+
+# Start from the CUDA Image
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} as base
+
+# UBUNTU_VERSION and CUDA_VERSION are specified again because the FROM directive resets ARGs
+# (but their default value is retained if set previously)
+ARG UBUNTU_VERSION
+ARG CUDA_VERSION
+
+
+########################################
+# Default Settings
+########################################
+# Needed for string substitution
+SHELL ["/bin/bash", "-c"]
+
+# To remove debconf build warnings
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Change locale to fix encoding error on mail-parser install
+RUN apt-get update \
+ && apt-get install --no-install-suggests -y \
+    locales \
+ && locale-gen en_US.UTF-8 \
+ && locale-gen ko_KR.UTF-8 \
+    ;
+
+# Set default locale for the environment
+ENV LC_ALL=en_US.UTF-8 \
+    LANG=ko_KR.UTF-8
+
+# Change the timezone
+RUN ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime \
+    ;
+
+# Install essential programs
+RUN apt-get update \
+ && apt-get install --no-install-suggests -y \
+    curl \
+    wget \
+    unzip \
+    ssh \
+    git \
+    vim \
+    bc \
+    ;
+
+# Install build tools
+RUN apt-get update --fix-missing \
+ && apt-get install --no-install-suggests -y \
+    software-properties-common \
+    build-essential \
+    pkg-config \
+    cmake \
+    ;
+
+
+
+########################################
+# Python
+########################################
+ARG PYTHON_VERSION=3.6.7
+ARG USE_PYTHON_3_NOT_2=1
+
+# See http://bugs.python.org/issue19846
+#ENV LANG C.UTF-8
+
+ARG _PY_SUFFIX=${USE_PYTHON_3_NOT_2:+3}
+ARG PYTHON=python${_PY_SUFFIX}
+ARG PIP=pip${_PY_SUFFIX}
+
+# Install python for auto-aliasing
+RUN apt-get update \
+ && apt-get install --no-install-suggests -y \
+    ${PYTHON} \
+    ${PYTHON}-pip \
+    ;
+
+# Install dependencies
+RUN apt-get update --fix-missing \
+ && apt-get install --no-install-suggests -y \
+    zlib1g-dev \
+    libssl-dev \
+    libbz2-dev \
+    libffi-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    llvm \
+    tk-dev \
+    xz-utils \
+    ;
+
+# Install specified version of python
+RUN wget -O python.tgz https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz \
+ && tar -zxvf python.tgz \
+ && rm python.tgz \
+ && cd ./Python-${PYTHON_VERSION} \
+ && ./configure --enable-shared     \
+                --with-system-expat \
+                --with-system-ffi   \
+ && export NPROCS=`cat /proc/cpuinfo | grep cores | wc -l` \
+ && make -j ${NPROCS} \
+ && make install \
+ && ldconfig \
+ && cd ../ \
+ && rm -rf Python-${PYTHON_VERSION} \
+    ;
+
+# Upgrade pip for auto-aliasing
+RUN ${PIP} --no-cache-dir install --upgrade \
+    pip \
+    setuptools \
+    ;
+
+# Make symbolic link to python
+RUN ln -sf $(which ${PYTHON}) /usr/local/bin/python \
+ && ln -sf $(which ${PYTHON}) /usr/bin/python \
+    ;
+
+
+########################################
+# CUDA & CUDNN
+########################################
+ARG CUDA_VERSION
+ARG CUDNN_VERSION=7.6.2.24-1
+
+# (BUGFIX) nvidia:cuda image overwrite ARG CUDA_VERSION to ENV CUDA_VERSION(with revision version), use CUDA_MINOR_VERSION instead of CUDA_VERSION
+RUN CUDA_MINOR_VERSION=${CUDA_VERSION%.*} \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+    cuda-command-line-tools-${CUDA_MINOR_VERSION//./-} \
+    cuda-cublas-${CUDA_MINOR_VERSION//./-} \
+    cuda-cufft-${CUDA_MINOR_VERSION//./-} \
+    cuda-curand-${CUDA_MINOR_VERSION/./-} \
+    cuda-cusolver-${CUDA_MINOR_VERSION//./-} \
+    cuda-cusparse-${CUDA_MINOR_VERSION//./-} \
+    libcudnn${CUDNN_VERSION%%.*}=${CUDNN_VERSION}+cuda${CUDA_MINOR_VERSION} \
+    libcudnn${CUDNN_VERSION%%.*}-dev=${CUDNN_VERSION}+cuda${CUDA_MINOR_VERSION} \
+ && apt-mark hold \
+    libcudnn${CUDNN_VERSION%%.*} \
+    ;
+
+
+########################################
+# FFMpeg
+########################################
+ARG FFMPEG_VERSION=4.2.2-0york0
+
+# instead of compile it, fetch binary from jonathonf repo
+RUN apt-get install --no-install-suggests -y \
+    software-properties-common \
+ && add-apt-repository ppa:jonathonf/ffmpeg-${FFMPEG_VERSION%%.*} \
+ && apt-get update \
+ && apt-get install --no-install-suggests -y \
+    #ffmpeg=7:${FFMPEG_VERSION}~${UBUNTU_VERSION} \
+    ffmpeg \
+ && apt-mark hold \
+    ffmpeg \
+    ;
+
+
+########################################
+# OpenCV
+########################################
+ARG OPENCV_VERSION=3.4.5
+
+# Install OpenCV3 Python bindings
+# (BUGFIX) to install libjasper-dev package
+RUN add-apt-repository "deb http://security.ubuntu.com/ubuntu $(lsb_release --codename | cut -f2)-security main" \
+ && apt-get update \
+ && apt-get install --no-install-suggests -y \
+    libgtk2.0-dev libcanberra-gtk-module python3-tk \
+    libjpeg-dev libtiff5-dev libjasper-dev libpng-dev \
+    libavcodec-dev libavformat-dev libswscale-dev libxvidcore-dev libx264-dev libxine2-dev \
+    libv4l-dev v4l-utils \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    mesa-utils libgl1-mesa-dri \
+    libatlas-base-dev gfortran libeigen3-dev \
+    python2.7-dev python3-dev python3-numpy \
+ && wget -O opencv.zip https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip \
+ && unzip opencv.zip \
+ && rm opencv.zip \
+ && wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip \
+ && unzip opencv_contrib.zip \
+ && rm opencv_contrib.zip \
+ && mkdir opencv-${OPENCV_VERSION}/build \
+ && cd ./opencv-${OPENCV_VERSION}/build \
+ && cmake \
+-D CMAKE_BUILD_TYPE=RELEASE \
+-D CMAKE_INSTALL_PREFIX=/usr/local \
+-D WITH_TBB=OFF \
+-D WITH_IPP=OFF \
+-D WITH_1394=OFF \
+-D BUILD_WITH_DEBUG_INFO=OFF \
+-D BUILD_DOCS=OFF \
+-D INSTALL_C_EXAMPLES=OFF \
+-D INSTALL_PYTHON_EXAMPLES=OFF \
+-D BUILD_EXAMPLES=OFF \
+-D BUILD_TESTS=OFF \
+-D BUILD_PERF_TESTS=OFF \
+-D WITH_QT=OFF \
+-D WITH_GTK2=ON \
+-D WITH_OPENGL=ON \
+#-D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
+-D WITH_V4L=ON \
+-D WITH_FFMPEG=ON \
+-D WITH_XINE=ON \
+-D BUILD_NEW_PYTHON_SUPPORT=ON \
+../ \
+ && export NPROCS=`cat /proc/cpuinfo | grep cores | wc -l` \
+ && make -j ${NPROCS} \
+ && make install \
+ && cd ../../ \
+ && rm -rf opencv-${OPENCV_VERSION} \
+ && rm -rf opencv_contrib-${OPENCV_VERSION} \
+    ;
+
+
+#########################################
+# OpenMPI
+########################################
+ARG OPENMPI_VERSION=4.0.0
+
+# Install OpenMPI
+RUN wget -O openmpi.tar.gz https://download.open-mpi.org/release/open-mpi/v${OPENMPI_VERSION:0:3}/openmpi-${OPENMPI_VERSION}.tar.gz \
+ && tar -zxvf openmpi.tar.gz \
+ && rm openmpi.tar.gz \
+ && cd ./openmpi-${OPENMPI_VERSION} \
+ && ./configure --enable-orterun-prefix-by-default --with-cuda \
+ && export NPROCS=`cat /proc/cpuinfo | grep cores | wc -l` \
+ && make -j ${NPROCS} all \
+ && make install \
+ && ldconfig \
+ && cd ../ \
+ && rm -rf openmpi-${OPENMPI_VERSION} \
+    ;
+
+
+#########################################
+# NCCL
+########################################
+# NCCL is already installed in CUDA docker image
+
+
+#######################################
+# Tensorflow
+########################################
+ARG TENSORFLOW_VERSION=1.15.2
+ARG WITH_TFDS=1
+
+# Install Tensorflow (GPU version)
+RUN CUDA_MINOR_VERSION=${CUDA_VERSION%.*} \
+    PYTHON_MINOR_VERSION=${PYTHON_VERSION%.*} \
+ && pip --no-cache-dir install  \
+    tensorflow-gpu===${TENSORFLOW_VERSION} \
+    ;
+
+####################
+# Tensorflow-Datasets for Tensorflow
+####################
+ARG TFDS_VERSION=1.1.0
+
+RUN if [ "$WITH_TFDS" = "1" ]; then \
+        pip --no-cache-dir install  \
+        tensorflow-datasets==${TFDS_VERSION} \
+        ; \
+    else \
+        echo "building without tensorflow-datasets" ; \
+    fi
+
+
+#######################################
+# PyTorch
+########################################
+ARG PYTORCH_VERSION=1.3.0
+ARG WITH_TORCHVISION=1
+ARG WITH_TENSORBOARD=1
+
+# Install Pytorch
+RUN CUDA_MINOR_VERSION=${CUDA_VERSION%.*} \
+    PYTHON_MINOR_VERSION=${PYTHON_VERSION%.*} \
+ && pip --no-cache-dir install  \
+    torch===${PYTORCH_VERSION}+cu${CUDA_MINOR_VERSION//./} \
+    -f https://download.pytorch.org/whl/torch_stable.html \
+    ;
+
+####################
+# TorchVision for PyTorch
+####################
+ARG TORCHVISION_VERSION=0.4.1
+
+RUN CUDA_MINOR_VERSION=${CUDA_VERSION%.*} \
+    PYTHON_MINOR_VERSION=${PYTHON_VERSION%.*} \
+ && if [ "$WITH_TORCHVISION" = "1" ]; then \
+        pip --no-cache-dir install  \
+        torchvision===${TORCHVISION_VERSION}+cu${CUDA_MINOR_VERSION//./} \
+        -f https://download.pytorch.org/whl/torch_stable.html \
+        ; \
+    else \
+        echo "building without torchvision" ; \
+    fi
+
+####################
+# Tensorboard for PyTorch
+####################
+ARG TENSORBOARD_VERSION=1.15.0
+
+RUN if [ "$WITH_TENSORBOARD" = "1" ]; then \
+        pip --no-cache-dir install  \
+            #tensorboard==${TENSORBOARD_VERSION}  \
+            tensorboardX \
+            ; \
+    else \
+        echo "building without tensorboard" ; \
+    fi
+
+
+########################################
+# Horovod
+########################################
+ARG HOROVOD_VERSION=0.18.2
+
+# (BUGFIX) install g++ >= 4.8.5 < 5.0 to build Horovod
+RUN apt-get install --no-install-suggests -y \
+    g++-4.8 \
+    ;
+
+# (BUGFIX) install g++ > 7.3.1 to build horovod with Tensorflow(>=1.15.0)
+RUN apt-get install --no-install-suggests -y \
+    software-properties-common \
+ && add-apt-repository ppa:ubuntu-toolchain-r/test \
+ && apt-get update \
+ && apt-get install --no-install-suggests -y \
+    g++-7 \
+    ;
+
+# Install Horovod
+RUN HOROVOD_GPU_ALLREDUCE=NCCL \
+    pip --no-cache-dir install \
+    horovod==${HOROVOD_VERSION} \
+    ;
+
+
+########################################
+# Sudoer
+########################################
+ARG SUDOER=dev
+
+# Add sudoer
+RUN apt-get install --no-install-suggests -y \
+    sudo \
+ && adduser --disabled-password --gecos '' ${SUDOER} \
+ && echo "${SUDOER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${SUDOER} \
+ && chmod 0440 /etc/sudoers.d/${SUDOER} \
+    ;
+
+# to access video devices
+RUN usermod -aG video ${SUDOER} \
+    ;
+
+
+########################################
+# Bash
+########################################
+COPY bashrc /etc/bash.bashrc
+RUN echo "PS1=(container)\${PS1}">>/home/dev/.bashrc
+
+
+########################################
+# Pycharm
+########################################
+# Install dependencies
+RUN apt-get install \
+    libxtst6 \
+    ;
+
+
+########################################
+# Other dependencies
+########################################
+RUN pip install \
+    pillow \
+    h5py \
+    keras_preprocessing \
+    keras_applications \
+    matplotlib \
+    numpy \
+    scipy \
+    sklearn \
+    pandas \
+    future \
+    ;

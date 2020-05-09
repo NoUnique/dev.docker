@@ -1,0 +1,50 @@
+# docker-compose script to build multi-node training environment.
+#
+# Author : NoUnique (kofmap@gmail.com)
+# Copyright 2020 NoUnique. All Rights Reserved
+
+version: '2.2'
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dev
+    image: "${COMPOSE_IMAGE_NAME}:${USER}"
+    environment:
+      - PYTHONPATH=/home/dev/dev
+      - PYTHONUNBUFFERED=0
+      - DISPLAY=${DISPLAY}
+    working_dir: /home/dev/dev
+    user: dev
+    network_mode: host
+    volumes:
+      - ..:/home/dev/dev:rw
+      - /data:/data
+      # Dev settings
+      - ~:/home/dev
+      # X11 fowarding
+      - ~/.Xauthority:/home/dev/.Xauthority
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    entrypoint:
+      - /bin/bash
+    stdin_open: true # -i(interactive) option in docker
+    tty: true # -t(tty) option in docker
+    shm_size: 64G
+
+  tensorboard:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dev
+    hostname: tensorboard
+    image: "${COMPOSE_IMAGE_NAME}:${USER}"
+    working_dir: /home/dev/dev
+    user: dev
+    ports:
+      - "6006:6006"
+    volumes:
+      - ..:/home/dev/dev:rw
+    command: tensorboard --logdir /home/dev/dev/checkpoints --host 0.0.0.0
+    stdin_open: true
+    tty: true
+    shm_size: 4G
