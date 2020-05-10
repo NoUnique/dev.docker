@@ -400,4 +400,6 @@ RUN pip install \
     sklearn \
     pandas \
     future \
+    thop \
+    torchsummary \
     ;
