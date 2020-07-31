@@ -67,7 +67,7 @@ RUN apt-get update --fix-missing \
 ########################################
 # Python
 ########################################
-ARG PYTHON_VERSION=3.6.7
+ARG PYTHON_VERSION=3.7.8
 ARG USE_PYTHON_3_NOT_2=1
 
 # See http://bugs.python.org/issue19846
@@ -126,6 +126,8 @@ RUN ${PIP} --no-cache-dir install --upgrade \
 # Make symbolic link to python
 RUN ln -sf $(which ${PYTHON}) /usr/local/bin/python \
  && ln -sf $(which ${PYTHON}) /usr/bin/python \
+ && ln -sf $(which ${PIP}) /usr/local/bin/pip \
+ && ln -sf $(which ${PIP}) /usr/bin/pip \
     ;
 
 
@@ -256,7 +258,7 @@ RUN wget -O openmpi.tar.gz https://download.open-mpi.org/release/open-mpi/v${OPE
 #######################################
 # Tensorflow
 ########################################
-ARG TENSORFLOW_VERSION=1.15.2
+ARG TENSORFLOW_VERSION=1.15.3
 ARG WITH_TFDS=1
 
 # Install Tensorflow (GPU version)
@@ -269,7 +271,7 @@ RUN CUDA_MINOR_VERSION=${CUDA_VERSION%.*} \
 ####################
 # Tensorflow-Datasets for Tensorflow
 ####################
-ARG TFDS_VERSION=1.1.0
+ARG TFDS_VERSION=3.2.0
 
 RUN if [ "$WITH_TFDS" = "1" ]; then \
         pip --no-cache-dir install  \
