@@ -393,6 +393,7 @@ RUN apt-get install \
 ########################################
 RUN pip install \
     pillow \
+    pydub \
     h5py \
     keras_preprocessing \
     keras_applications \
