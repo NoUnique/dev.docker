@@ -25,6 +25,7 @@ function fn_configure() {
     IS_EXIST=${IS_EXIST:="FALSE"}
     IS_RELEASE=${IS_RELEASE:="FALSE"}
     RUN_TENSORBOARD=${RUN_TENSORBOARD:="FALSE"}
+    RUN_JUPYTER=${RUN_JUPYTER:="FALSE"}
     RUN_PYCHARM=${RUN_PYCHARM:="FALSE"}
     DO_BUILD=${DO_BUILD:="FALSE"}
     DO_RUN=${DO_RUN:="FALSE"}
@@ -76,6 +77,19 @@ function fn_run_tensorboard() {
     fi
     echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
+    DEFAULT_SERVICE=${TEMP}
+}
+
+function fn_run_jupyter() {
+    TEMP=${DEFAULT_SERVICE}
+    DEFAULT_SERVICE="jupyter"
+    fn_is_running
+    if [[ "${IS_RUNNING}" == "TRUE" ]]; then
+        docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} kill ${DEFAULT_SERVICE}
+    fi
+    echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
+    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
+    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} logs -t ${DEFAULT_SERVICE}
     DEFAULT_SERVICE=${TEMP}
 }
 
@@ -134,6 +148,9 @@ function fn_main() {
     if [[ "${RUN_TENSORBOARD}" == "TRUE" ]]; then
         fn_run_tensorboard
     fi
+    if [[ "${RUN_JUPYTER}" == "TRUE" ]]; then
+        fn_run_jupyter
+    fi
     if [[ "${RUN_PYCHARM}" == "TRUE" ]]; then
         fn_run_pycharm
     fi
@@ -160,7 +177,7 @@ function fn_upgrade_compose() {
     fi
 }
 
-optspec=":bdrkstp-:"
+optspec=":bdrkstjp-:"
 while getopts "${optspec}" optchar; do
     case ${optchar} in
         -)
@@ -201,6 +218,10 @@ while getopts "${optspec}" optchar; do
                     echo "Parsing option: '--${OPTARG}', run tensorboard";
                     RUN_TENSORBOARD="TRUE"
                     ;;
+                jupyter)
+                    echo "Parsing option: '--${OPTARG}', run jupyter";
+                    RUN_JUPYTER="TRUE"
+                    ;;
                 pycharm)
                     echo "Parsing option: '--${OPTARG}', run pycharm";
                     RUN_PYCHARM="TRUE"
@@ -230,6 +251,9 @@ while getopts "${optspec}" optchar; do
             ;;
         t)
             RUN_TENSORBOARD="TRUE"
+            ;;
+        j)
+            RUN_JUPYTER="TRUE"
             ;;
         p)
             RUN_PYCHARM="TRUE"

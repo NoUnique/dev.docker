@@ -392,6 +392,7 @@ RUN apt-get install \
 # Other dependencies
 ########################################
 RUN pip install \
+    jupyter \
     pillow \
     pydub \
     h5py \

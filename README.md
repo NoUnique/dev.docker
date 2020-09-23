@@ -32,6 +32,7 @@ Tested environment
     -d : down container (kill container and remove container, network and volumes) \
     -t, --tensorboard : run tensorboard (default path: /home/dev/dev/checkpoints, port: 6006) \
     -p, --pycharm : run pycharm (default path: /home/dev/pycharm/bin/pycharm.sh) \
+    -j, --jupyter : run jupyter notebook server (default port: 8888) \
     --no-cache : build image from scratch(use no cache)
     
     **This script makes ONLY 1 CONTAINER**

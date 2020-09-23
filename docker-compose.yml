@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile_dev
+    hostname: devenv 
     image: "${COMPOSE_IMAGE_NAME}:${USER}"
     environment:
       - PYTHONPATH=/home/dev/dev
@@ -48,3 +49,23 @@ services:
     stdin_open: true
     tty: true
     shm_size: 4G
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dev
+    hostname: jupyter_notebook
+    image: "${COMPOSE_IMAGE_NAME}:${USER}"
+    environment:
+      - PYTHONUNBUFFERED=0
+    working_dir: /home/dev/dev
+    user: dev
+    ports:
+      - "8888:8888"
+    volumes:
+      - ..:/home/dev/dev:rw
+    command: jupyter notebook --no-browser --ip=0.0.0.0 --port=8888 --allow-root
+    stdin_open: true
+    tty: true
+    shm_size: 4G
+
