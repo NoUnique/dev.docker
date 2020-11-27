@@ -89,6 +89,10 @@ function fn_run_jupyter() {
     fi
     echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
+    echo "Set password for public access"
+    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} exec ${DEFAULT_SERVICE} jupyter notebook password
+    echo "Re-run jupyter server container(apply password)"
+    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} restart ${DEFAULT_SERVICE}
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} logs -t ${DEFAULT_SERVICE}
     DEFAULT_SERVICE=${TEMP}
 }
