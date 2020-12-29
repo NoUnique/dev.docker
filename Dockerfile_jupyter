@@ -1,0 +1,24 @@
+# Dockerfile script to build multi-node training environment.
+# (for jupyter notebook container)
+#
+# Author : NoUnique (kofmap@gmail.com)
+# Copyright 2020 NoUnique. All Rights Reserved
+
+
+# Start from default image
+ARG COMPOSE_IMAGE_NAME
+ARG USER
+FROM ${COMPOSE_IMAGE_NAME}:${USER} as base
+
+
+########################################
+# Jupyter Notebook
+########################################
+# Install jupyter
+RUN pip install \
+    jupyter \
+    ;
+
+# Install jupyter-vim-binding
+RUN git clone https://github.com/lambdalisue/jupyter-vim-binding /usr/local/share/jupyter/nbextensions/vim_binding \
+    ;

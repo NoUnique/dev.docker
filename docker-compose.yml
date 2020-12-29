@@ -10,22 +10,22 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile_dev
+      args:
+        USER: ${USER}
     hostname: devenv 
     image: "${COMPOSE_IMAGE_NAME}:${USER}"
     environment:
-      - PYTHONPATH=/home/dev/dev
+      - PYTHONPATH=/home/${USER}/dev
       - PYTHONUNBUFFERED=0
       - DISPLAY=${DISPLAY}
-    working_dir: /home/dev/dev
-    user: dev
+    working_dir: /home/${USER}/dev
+    user: ${USER}
     network_mode: host
     volumes:
-      - ..:/home/dev/dev:rw
+      - ..:/home/${USER}/dev:rw
       - /data:/data
-      # Dev settings
-      - ~:/home/dev
       # X11 fowarding
-      - ~/.Xauthority:/home/dev/.Xauthority
+      - ~/.Xauthority:/home/${USER}/.Xauthority
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     entrypoint:
       - /bin/bash
@@ -37,15 +37,17 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile_dev
+      args:
+        USER: ${USER}
     hostname: tensorboard
     image: "${COMPOSE_IMAGE_NAME}:${USER}"
-    working_dir: /home/dev/dev
-    user: dev
+    working_dir: /home/${USER}/dev
+    user: ${USER}
     ports:
       - "6006:6006"
     volumes:
-      - ..:/home/dev/dev:rw
-    command: tensorboard --logdir /home/dev/dev/checkpoints --host 0.0.0.0
+      - ..:/home/${USER}/dev:rw
+    command: tensorboard --logdir /home/${USER}/dev/checkpoints --host 0.0.0.0
     stdin_open: true
     tty: true
     shm_size: 4G
@@ -53,19 +55,20 @@ services:
   jupyter:
     build:
       context: .
-      dockerfile: ./Dockerfile_dev
+      dockerfile: ./Dockerfile_jupyter
+      args:
+        USER: ${USER}
+        COMPOSE_IMAGE_NAME: ${COMPOSE_IMAGE_NAME}
     hostname: jupyter_notebook
-    image: "${COMPOSE_IMAGE_NAME}:${USER}"
-    environment:
-      - PYTHONUNBUFFERED=0
-    working_dir: /home/dev/dev
-    user: dev
+    image: "${COMPOSE_IMAGE_NAME}/jupyter:${USER}"
+    working_dir: /home/${USER}/dev
+    user: ${USER}
     ports:
       - "8888:8888"
     volumes:
-      - ..:/home/dev/dev:rw
+      - ..:/home/${USER}/dev:rw
+      - /data:/data
     command: jupyter notebook --no-browser --ip=0.0.0.0 --port=8888 --allow-root
     stdin_open: true
     tty: true
-    shm_size: 4G
-
+    shm_size: 16G

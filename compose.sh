@@ -21,30 +21,15 @@ COMPOSE_PROJECT_NAME="${USER}_${COMPOSE_PROJECT_NAME}"
 
 function fn_configure() {
     NO_CACHE=${NO_CACHE:=""}
-    IS_RUNNING=${IS_RUNNING:="FALSE"}
     IS_EXIST=${IS_EXIST:="FALSE"}
-    IS_RELEASE=${IS_RELEASE:="FALSE"}
+    IS_RUNNING=${IS_RUNNING:="FALSE"}
     RUN_TENSORBOARD=${RUN_TENSORBOARD:="FALSE"}
     RUN_JUPYTER=${RUN_JUPYTER:="FALSE"}
-    RUN_PYCHARM=${RUN_PYCHARM:="FALSE"}
     DO_BUILD=${DO_BUILD:="FALSE"}
     DO_RUN=${DO_RUN:="FALSE"}
     DO_BASH=${DO_BASH:="FALSE"}
     DO_KILL=${DO_KILL:="FALSE"}
     DO_DOWN=${DO_DOWN:="FALSE"}
-}
-
-function fn_is_running() {
-    IS_RUNNING=`docker ps -q --no-trunc | grep $(docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} ps -q ${DEFAULT_SERVICE})`
-    if [[ "${IS_RUNNING}" != "FALSE" ]] && [[ -n "${IS_RUNNING}" ]]; then
-        IS_RUNNING="TRUE"
-    fi
-}
-
-function fn_check_release() {
-    if [[ "${IS_RELEASE}" == "TRUE" ]]; then
-        DEFAULT_SERVICE="release"
-    fi
 }
 
 function fn_is_exist() {
@@ -54,41 +39,35 @@ function fn_is_exist() {
     fi
 }
 
+function fn_is_running() {
+    IS_RUNNING=`docker ps -q --no-trunc | grep $(docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} ps -q ${DEFAULT_SERVICE})`
+    if [[ "${IS_RUNNING}" != "FALSE" ]] && [[ -n "${IS_RUNNING}" ]]; then
+        IS_RUNNING="TRUE"
+    fi
+}
+
 function fn_build() {
     echo "Build '${COMPOSE_PROJECT_NAME}' docker image"
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} build ${NO_CACHE} ${DEFAULT_SERVICE}
 }
 
 function fn_run() {
-    fn_is_running
-    if [[ "${IS_RUNNING}" == "TRUE" ]]; then
-        fn_down
-    fi
-    echo "Run '${COMPOSE_PROJECT_NAME}' docker container"
+    echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
+    fn_kill $1
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
 }
 
 function fn_run_tensorboard() {
     TEMP=${DEFAULT_SERVICE}
     DEFAULT_SERVICE="tensorboard"
-    fn_is_running
-    if [[ "${IS_RUNNING}" == "TRUE" ]]; then
-        docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} kill ${DEFAULT_SERVICE}
-    fi
-    echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
-    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
+    fn_run
     DEFAULT_SERVICE=${TEMP}
 }
 
 function fn_run_jupyter() {
     TEMP=${DEFAULT_SERVICE}
     DEFAULT_SERVICE="jupyter"
-    fn_is_running
-    if [[ "${IS_RUNNING}" == "TRUE" ]]; then
-        docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} kill ${DEFAULT_SERVICE}
-    fi
-    echo "Run '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
-    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} up -d ${DEFAULT_SERVICE}
+    fn_run "rm"
     echo "Set password for public access"
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} exec ${DEFAULT_SERVICE} jupyter notebook password
     echo "Restart jupyter server container(apply password)"
@@ -99,22 +78,12 @@ function fn_run_jupyter() {
     DEFAULT_SERVICE=${TEMP}
 }
 
-function fn_run_pycharm() {
-    fn_is_running
-    if [[ "${IS_RUNNING}" != "TRUE" ]]; then
-        fn_run
-    fi
-    echo "Connect to shell of '${COMPOSE_PROJECT_NAME}' docker container"
-    fn_upgrade_compose
-    docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} exec -e DISPLAY=${DISPLAY} ${DEFAULT_SERVICE} /home/dev/pycharm/bin/pycharm.sh
-}
-
 function fn_bash() {
     fn_is_running
     if [[ "${IS_RUNNING}" != "TRUE" ]]; then
         fn_run
     fi
-    echo "Connect to shell of '${COMPOSE_PROJECT_NAME}' docker container"
+    echo "Connect to shell of '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
     fn_upgrade_compose
     docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} exec ${DEFAULT_SERVICE} /bin/bash
 }
@@ -122,10 +91,14 @@ function fn_bash() {
 function fn_kill() {
     fn_is_running
     if [[ "${IS_RUNNING}" == "TRUE" ]]; then
-        echo "Kill '${COMPOSE_PROJECT_NAME}' docker container"
-        docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} kill
+        echo "Kill '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
+        docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} kill ${DEFAULT_SERVICE}
+        if [[ "$1" == "rm" ]]; then
+            echo "Remove state of ${DEFAULT_SERVICE} service container"
+            docker-compose -f ${SCRIPT_DIR}/${COMPOSE_FNAME} -p ${COMPOSE_PROJECT_NAME} rm ${DEFAULT_SERVICE}
+        fi
     else
-        echo "There is no running '${COMPOSE_PROJECT_NAME}' docker container"
+        echo "There is no running '${COMPOSE_PROJECT_NAME}_${DEFAULT_SERVICE}' docker container"
     fi
 }
 
@@ -139,7 +112,6 @@ function fn_down() {
 
 function fn_main() {
     fn_configure
-    fn_check_release
     if [[ "${DO_DOWN}" == "TRUE" ]]; then
         fn_down
     elif [[ "${DO_KILL}" == "TRUE" ]]; then
@@ -156,9 +128,6 @@ function fn_main() {
     fi
     if [[ "${RUN_JUPYTER}" == "TRUE" ]]; then
         fn_run_jupyter
-    fi
-    if [[ "${RUN_PYCHARM}" == "TRUE" ]]; then
-        fn_run_pycharm
     fi
 }
 
@@ -183,7 +152,7 @@ function fn_upgrade_compose() {
     fi
 }
 
-optspec=":bdrkstjp-:"
+optspec=":bdrkstj-:"
 while getopts "${optspec}" optchar; do
     case ${optchar} in
         -)
@@ -218,19 +187,15 @@ while getopts "${optspec}" optchar; do
 
                 release)
                     echo "Parsing option: '--${OPTARG}', release mode";
-                    IS_RELEASE="TRUE"
+                    DEFAULT_SERVICE="release"
                     ;;
                 tensorboard)
                     echo "Parsing option: '--${OPTARG}', run tensorboard";
-                    RUN_TENSORBOARD="TRUE"
+                    RUN_TENSORBOARD="tensorboard"
                     ;;
                 jupyter)
                     echo "Parsing option: '--${OPTARG}', run jupyter";
                     RUN_JUPYTER="TRUE"
-                    ;;
-                pycharm)
-                    echo "Parsing option: '--${OPTARG}', run pycharm";
-                    RUN_PYCHARM="TRUE"
                     ;;
 
                 *)
@@ -260,9 +225,6 @@ while getopts "${optspec}" optchar; do
             ;;
         j)
             RUN_JUPYTER="TRUE"
-            ;;
-        p)
-            RUN_PYCHARM="TRUE"
             ;;
         *)
             if [ "${OPTERR}" != 1 ] || [ "${optspec:0:1}" = ":" ]; then

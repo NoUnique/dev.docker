@@ -30,8 +30,7 @@ Tested environment
     -s : connect to shell(bash) \
     -k : kill container (attach and kill) \
     -d : down container (kill container and remove container, network and volumes) \
-    -t, --tensorboard : run tensorboard (default path: /home/dev/dev/checkpoints, port: 6006) \
-    -p, --pycharm : run pycharm (default path: /home/dev/pycharm/bin/pycharm.sh) \
+    -t, --tensorboard : run tensorboard (default path: /home/${USER}/dev/checkpoints, port: 6006) \
     -j, --jupyter : run jupyter notebook server (default port: 8888) \
     --no-cache : build image from scratch(use no cache)
     
@@ -47,6 +46,12 @@ Tested environment
     {PJT_DIR}$ bash ./compose.sh -brs
     ```
     build -> run -> attach to shell (Automatically executed sequentially)
+
+- To build specific service
+    ```bash
+    {PJT_DIR}$ bash ./compose.sh -bj
+    ```
+  build jupyter image -> run jupyter service (Automatically executed sequentially)
     
 <br>
     

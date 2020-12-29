@@ -7,7 +7,7 @@
 ARG UBUNTU_VERSION=16.04
 ARG CUDA_VERSION=10.0
 
-# Start from the CUDA Image
+# Start from the CUDA image
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} as base
 
 # UBUNTU_VERSION and CUDA_VERSION are specified again because the FROM directive resets ARGs
@@ -24,6 +24,10 @@ SHELL ["/bin/bash", "-c"]
 
 # To remove debconf build warnings
 ARG DEBIAN_FRONTEND=noninteractive
+
+# (BUGFIX) resolve apt-get signiture verifying problems
+RUN chown root:root /tmp; \
+    chmod 1777 /tmp
 
 # Change locale to fix encoding error on mail-parser install
 RUN apt-get update \
@@ -62,6 +66,32 @@ RUN apt-get update --fix-missing \
     cmake \
     ;
 
+
+####################
+# Sudoer
+####################
+ARG USER
+ARG SUDOER=${USER}
+
+# Add sudoer
+RUN apt-get install --no-install-suggests -y \
+    sudo \
+ && adduser --disabled-password --gecos '' ${SUDOER} \
+ && echo "${SUDOER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${SUDOER} \
+ && chmod 0440 /etc/sudoers.d/${SUDOER} \
+    ;
+
+# to access video devices
+RUN usermod -aG video ${SUDOER} \
+ && usermod -aG audio ${SUDOER} \
+    ;
+
+
+####################
+# Bash
+####################
+COPY bashrc /etc/bash.bashrc
+RUN echo "PS1=(container)\${PS1}">>/home/${USER}/.bashrc
 
 
 ########################################
@@ -165,8 +195,8 @@ RUN apt-get install --no-install-suggests -y \
  && add-apt-repository ppa:jonathonf/ffmpeg-${FFMPEG_VERSION%%.*} \
  && apt-get update \
  && apt-get install --no-install-suggests -y \
-    #ffmpeg=7:${FFMPEG_VERSION}~${UBUNTU_VERSION} \
     ffmpeg \
+    #ffmpeg=7:${FFMPEG_VERSION}~${UBUNTU_VERSION} \
  && apt-mark hold \
     ffmpeg \
     ;
@@ -177,20 +207,29 @@ RUN apt-get install --no-install-suggests -y \
 ########################################
 ARG OPENCV_VERSION=3.4.5
 
-# Install OpenCV3 Python bindings
+# Install dependencies
 # (BUGFIX) to install libjasper-dev package
 RUN add-apt-repository "deb http://security.ubuntu.com/ubuntu xenial-security main" \
  && apt-get update \
  && apt-get install --no-install-suggests -y \
     libgtk2.0-dev libcanberra-gtk-module python3-tk \
     libjpeg-dev libtiff5-dev libjasper-dev libpng-dev \
-    libavcodec-dev libavformat-dev libswscale-dev libxvidcore-dev libx264-dev libxine2-dev \
+    libavcodec-dev libavformat-dev libswscale-dev libavresample-dev \
+    libxvidcore-dev libx264-dev libxine2-dev \
     libv4l-dev v4l-utils \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     mesa-utils libgl1-mesa-dri \
     libatlas-base-dev gfortran libeigen3-dev \
     python2.7-dev python3-dev python3-numpy \
- && wget -O opencv.zip https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip \
+    ;
+
+# Install dependencies to build opencv-python
+RUN pip install \
+    numpy \
+    ;
+
+# Build OpenCV3 and it's python bindings
+RUN wget -O opencv.zip https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip \
  && unzip opencv.zip \
  && rm opencv.zip \
  && wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip \
@@ -219,6 +258,13 @@ RUN add-apt-repository "deb http://security.ubuntu.com/ubuntu xenial-security ma
 -D WITH_FFMPEG=ON \
 -D WITH_XINE=ON \
 -D BUILD_NEW_PYTHON_SUPPORT=ON \
+-D BUILD_opencv_python3=ON \
+-D HAVE_opencv_python3=ON \
+-D PYTHON_DEFAULT_EXECUTABLE=$(which ${PYTHON}) \
+-D PYTHON3_INCLUDE_DIR=/usr/local/include/python${PYTHON_VERSION%.*}m \
+-D PYTHON3_NUMPY_INCLUDE_DIRS=/usr/local/lib/python${PYTHON_VERSION%.*}/site-packages/numpy/core/include/ \
+-D PYTHON3_PACKAGES_PATH=/usr/local/lib/python${PYTHON_VERSION%.*}/site-packages \
+-D PYTHON3_LIBRARY=/usr/local/lib/libpython${PYTHON_VERSION%.*}m.so \
 ../ \
  && export NPROCS=`cat /proc/cpuinfo | grep cores | wc -l` \
  && make -j ${NPROCS} \
@@ -355,59 +401,13 @@ RUN HOROVOD_GPU_ALLREDUCE=NCCL \
 
 
 ########################################
-# Sudoer
-########################################
-ARG SUDOER=dev
-
-# Add sudoer
-RUN apt-get install --no-install-suggests -y \
-    sudo \
- && adduser --disabled-password --gecos '' ${SUDOER} \
- && echo "${SUDOER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${SUDOER} \
- && chmod 0440 /etc/sudoers.d/${SUDOER} \
-    ;
-
-# to access video devices
-RUN usermod -aG video ${SUDOER} \
-    ;
-
-
-########################################
-# Bash
-########################################
-COPY bashrc /etc/bash.bashrc
-RUN echo "PS1=(container)\${PS1}">>/home/dev/.bashrc
-
-
-########################################
-# Pycharm
-########################################
-# Install dependencies
-RUN apt-get install \
-    libxtst6 \
-    ;
-
-
-########################################
-# Jupyter Notebook
-########################################
-# Install jupyter
-RUN pip install \
-    jupyter \
-    ;
-
-# Install jupyter-vim-binding
-RUN git clone https://github.com/lambdalisue/jupyter-vim-binding /usr/local/share/jupyter/nbextensions/vim_binding \
-    ;
-
-
-########################################
 # Other dependencies
 ########################################
+# (BUGFIX) install h5py < 3.0.0 to safely load keras model (https://github.com/tensorflow/tensorflow/issues/44467)
 RUN pip install \
     pillow \
     pydub \
-    h5py \
+    h5py==2.10.0 \
     keras_preprocessing \
     keras_applications \
     matplotlib \
